@@ -56,6 +56,40 @@ string genKey(deque<position>& deque_, int len){
 	return res;
 }
 
+struct Circle{
+	Point ct;
+	float radius;
+};
+
+class Feature{
+public:
+	Circle circle;
+	deque<position> positions;
+	deque<position> polar_positions;
+
+	Feature() {};
+	Feature(deque<position>& positions_, int len){
+		positions.assign(positions_.begin(), positions_.begin()+len);
+
+		// get circle cpt, radius
+
+		// get polar_positions using circle cpt, radius
+		polar_positions = positions;
+	}
+	void append(position& pos){
+		positions.push_back(pos);
+		polar_positions.push_back(pos);
+	}
+};
+
+//TODO
+// bucket size 최적화
+unordered_map<string, Feature> feature_map;
+
+int count_leaf = 0;
+int count_insert_success = 0;
+int count_insert_fail = 0;
+
 /**
  *
  * @param items
@@ -70,6 +104,7 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 						 int start, int end, int index, int k){
 
 	if(index == k){
+		// memoization에 존재하지 않았을경우 새로 만든다.
 
 		cout << "Leaf: ";
 		for(int i=0; i<k; i++){
@@ -77,6 +112,15 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 		}
 		string key = genKey(data, k);
 		cout << "(" << key << ")" << endl;
+
+		// memoization
+		auto insert_res = feature_map.insert(make_pair(key, Feature(data, k)));
+		count_leaf++;
+		if(insert_res.second){
+			count_insert_success++; // insert 성공한 것만 카운트
+		} else{
+			count_insert_fail++;
+		}
 
 		pair<string, deque<position>> tmp(key, data);
 		dict.insert(tmp);
@@ -89,14 +133,21 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 	for(int i=start; i<=end && end-i+1 >= k-index; i++){
 		data[index] = items[i];
 
-		int next_idx = index+1;
-		if(next_idx ==k && next_idx > MIN_DEPTH){
+		int next_idx = index + 1;
+		if(next_idx ==k && next_idx > MIN_DEPTH_LEAF){
+
+			// memoization 에서 find
 			cout << "Find ";
-			for(int i=0; i<index; i++){
-				cout << data[i] << " "; // current path
-			}
+//			for(int i=0; i<index; i++){
+//				cout << data[i] << " "; // current path
+//			}
 
 			string key = genKey(data, index);
+			Feature feature_prev = feature_map[key];
+			for(auto ele : feature_prev.positions){
+				cout << ele << " ";
+			}
+
 			cout << " from map for";
 
 			for(int i=0; i<next_idx; i++){
@@ -104,10 +155,23 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 			}
 			cout << "-> key:" << key << " + " << data[index] << endl;
 
+			// 새롭게 생성된 feature를 맵에 삽입한다.
+			feature_prev.append(data[index]);
+			string key_new = genKey(feature_prev.positions, index+1);
+			auto insert_res = feature_map.insert(make_pair(key_new, feature_prev));
+			count_leaf++;
+
+			if(insert_res.second){
+				count_insert_success++; // insert 성공한 것만 카운트
+			} else{
+				count_insert_fail++;
+			}
+
 		} else{
 			genComb(items, data, dst, i+1, end, index+1, k);
 		}
 	}
+
 }
 
 int main(){
@@ -129,9 +193,18 @@ int main(){
 	}
 
 	cout << endl;
-	cout << "Print fin dst" << endl;
-	for(auto& comb : target){
-		cout << comb << "(" << comb.size() << ")" << endl;
+	cout << "Print feature map position" << endl;
+	for(auto& ele : feature_map){
+		cout << "key: " << ele.first;
+
+		cout << " value: ";
+		for(auto& sub_ele : ele.second.positions){
+			cout << sub_ele << " ";
+		}
+		cout << endl;
 	}
-	
+
+	cout << "map size: " << feature_map.size() << ", insert count:" << count_leaf <<
+	", insert success: " << count_insert_success << ", insert fail: " << count_insert_fail << endl;
+
 }
