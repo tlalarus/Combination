@@ -366,6 +366,16 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 
 }
 
+struct cmp{
+	bool operator() (position a, position b){
+		return a.second.y > b.second.y;
+	}
+};
+
+bool cmp(const position a, const position b){
+	return a.second.y < b.second.y;
+}
+
 int main(){
 
 	auto start = std::chrono::high_resolution_clock::now();
@@ -462,4 +472,68 @@ int main(){
 	cout << " constructor count:" << count_construct << ", append count:" << count_append << endl;
 	cout << " new avg:" << (ttl_new / count_construct) << " append avg:" << (ttl_append / count_append) << endl;
 
+	// priority queue test
+	// position.second.y가 작은 것부터
+	map<int, vector<vector<position>>> permutations; // [size, permutations]
+
+	//TODO
+	// polar_positions 생성할때부터 우선순위 큐 사용하기
+
+	deque<position> example = feature_map["01346"].polar_positions;
+	sort(example.begin(), example.end(), cmp);
+
+	cout << "print example input" << endl;
+	for(auto& pos : example){
+		cout << pos << " ";
+	}
+	cout << endl << endl;
+
+	// perm 생성 시작
+	int len = example.size();
+	for(int i=0; i<len; i++){
+		position front_pos = example[i];
+		cout << "front: " << front_pos << endl;
+		deque<position> remains;
+		for(int j=0; j<len; j++){
+			if(i!=j){
+				remains.push_back(example[j]);
+			}
+		}
+
+		// remain roll
+		int n_remain = remains.size();
+		int cnt_remain = 0;
+		while(cnt_remain < n_remain){
+			deque<position> d_tmp = remains;
+			cout << "perm[" << cnt_remain << "]: ";
+
+			vector<position> perm_tmp;
+			perm_tmp.push_back(front_pos);
+
+			while(!d_tmp.empty()){
+				cout << d_tmp.front() << " ";
+				perm_tmp.push_back(d_tmp.front());
+				d_tmp.pop_front();
+			}
+			cout << endl;
+			permutations[len].push_back(perm_tmp);
+
+			position p = remains.front();
+			remains.pop_front();
+			remains.push_back(p);
+
+			cnt_remain++;
+		}
+		cout << endl;
+	}
+
+	cout << endl << endl << "Print perms" << endl;
+	for(auto pair_ : permutations){
+		cout << "[" << pair_.first << "]" << endl;
+		for(auto e : pair_.second){
+			cout << e << endl;
+		}
+		cout << endl;
+
+	}
 }
