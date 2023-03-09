@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIR})
 
-add_executable(combtest main.cpp)
+add_executable(combtest main.cpp feature.cpp feature.hpp pattern.cpp pattern.hpp)
 
 target_link_libraries(
         ${PROJECT_NAME}
