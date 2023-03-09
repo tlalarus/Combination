@@ -1,9 +1,9 @@
 #include <iostream>
 #include <vector>
 #include <queue>
+#include <cassert>
 #include <map>
 #include <cmath>
-#include <thread>
 #include <deque>
 #include <chrono>
 #include <utility>
@@ -13,8 +13,8 @@
 #include <opencv2/highgui.hpp>
 
 
-#define MIN_LENGTH_MEMOIZATION 3
-#define MIN_DEPTH_LEAF 4
+#define MIN_POINTS_FOR_CIRLCE 3
+#define MIN_POINTS_FOR_PERM 4
 
 #define RAD2DEG(x) (x * 180.f / CV_PI);
 
@@ -22,6 +22,10 @@ using namespace std;
 using namespace cv;
 
 using position = std::pair<int,cv::Point2f>;
+
+bool cmp(const position a, const position b){
+	return a.second.y < b.second.y;
+}
 
 ostream& operator<<(ostream& os, const pair<int, Point2f> pair){
 	os << "[" << pair.first << "]:" << pair.second;
@@ -109,6 +113,7 @@ Point2f getPolarPos(Point2f pos, Circle& circle){
  * @return
  */
 Circle circle_from(const position& A, const position& B, const position& C){
+
 	Point2f I = get_circle_center(B.second.x-A.second.x, B.second.y-A.second.y,
 																C.second.x-A.second.x, C.second.y-A.second.y);
 
@@ -126,6 +131,7 @@ Circle circle_from(const position& A, const position& B, const position& C){
 }
 
 Circle circle_from(const position& A, const position& B){
+
 	Point2f C = A.second + B.second;
 	C.x /= 2.0;
 	C.y /= 2.0;
@@ -138,6 +144,8 @@ Circle circle_from(const position& A, const position& B){
 
 	return res;
 }
+
+map<int, vector<vector<position>>> permutations; // [size, permutations]
 
 class Feature{
 public:
@@ -179,12 +187,11 @@ public:
 	Feature(deque<position>& positions_, int len){
 		positions.assign(positions_.begin(), positions_.begin()+len);
 
-		// get circle cpt, radius
 		// positions 길이에 따라 외접원생성 코드 작성
 		cout << "Feature() : position size=" << positions.size() << endl;
 
 		bool circle_generated = false;
-		if(positions.size() == MIN_LENGTH_MEMOIZATION){
+		if(positions.size() == MIN_POINTS_FOR_CIRLCE){
 			// 점 두개로 만든 원이 나머지 점을 포함하는지 검사
 
 			auto res = is_valid_circle_from(positions[0], positions[1], positions[2]);
@@ -199,6 +206,7 @@ public:
 		for(auto& p : positions){
 			polar_positions.emplace_back(p.first, getPolarPos(p.second, this->circle));
 		}
+
 		count_construct++;
 	}
 
@@ -210,6 +218,7 @@ public:
 	}
 
 	pair<bool, Circle> updateCircle(position p){
+
 		if(is_inside(this->circle, p.second)){
 			pair<bool, Circle> res = make_pair(false, this->circle);
 			return res;
@@ -274,10 +283,14 @@ public:
 		cout << "Feature::append() : current position size=" << positions.size() << endl;
 		positions.push_back(pos);
 
+		assert(positions.size() >= MIN_POINTS_FOR_PERM);
+
 		auto res = updateCircle(pos);
+
 		if(res.first){
 			// 외접원이 변경됨 -> polar position 업데이
 			this->circle = res.second;
+
 			polar_positions.clear();
 			for(auto& p : positions){
 				polar_positions.emplace_back(make_pair(p.first, getPolarPos(p.second, res.second)));
@@ -287,7 +300,57 @@ public:
 			polar_positions.emplace_back(make_pair(pos.first, getPolarPos(pos.second, res.second)));
 		}
 
+		// make permutations
+		//TODO
+		// polar position 생성할때부터 sort하기
+		cout << genSortedPerm() << " perm generated" << endl;
+
 		count_append++;
+	}
+
+	int genSortedPerm() {
+		sort(this->polar_positions.begin(), this->polar_positions.end(), cmp);
+
+		int perm_cnt = 0;
+
+		// perm 생성할 소스(front, remain)생성
+		int len = this->polar_positions.size();
+		for (int i = 0; i < len; i++) {
+			position front_p = this->polar_positions[i];
+			deque<position> remains;
+
+			for (int j = 0; j < len; j++) {
+				if (i != j) {
+					remains.push_back(this->polar_positions[j]);
+				}
+			}
+
+			// remain positions 돌리기
+			int n_remain = remains.size();
+			int cnt_remain = 0;
+
+			while (cnt_remain < n_remain) {
+				deque<position> d_tmp = remains;
+
+				vector<position> perm_tmp;
+				perm_tmp.push_back(front_p);
+
+				while (!d_tmp.empty()) {
+					perm_tmp.push_back(d_tmp.front());
+					d_tmp.pop_front();
+				}
+				permutations[len].push_back(perm_tmp);
+				perm_cnt++;
+
+				position p = remains.front();
+				remains.pop_front();
+				remains.push_back(p);
+
+				cnt_remain++;
+			}
+		}
+
+		return perm_cnt;
 	}
 
 };
@@ -338,7 +401,7 @@ void genComb(vector<position> &items, deque<position> & data, vector<deque<posit
 		data[index] = items[i];
 
 		int next_idx = index + 1;
-		if(next_idx ==k && next_idx >= MIN_DEPTH_LEAF){
+		if(next_idx ==k && next_idx >= MIN_POINTS_FOR_PERM){
 
 			auto time_append = std::chrono::high_resolution_clock::now();
 			// feature_map에서 find
@@ -372,9 +435,6 @@ struct cmp{
 	}
 };
 
-bool cmp(const position a, const position b){
-	return a.second.y < b.second.y;
-}
 
 int main(){
 
@@ -456,7 +516,7 @@ int main(){
 		cout << endl << endl;
 		int polar_pos_size = ele.second.polar_positions.size();
 
-		imshow(ele.first, img);
+//		imshow(ele.first, img);
 //		waitKey(0);
 
 		destroyAllWindows();
@@ -472,68 +532,16 @@ int main(){
 	cout << " constructor count:" << count_construct << ", append count:" << count_append << endl;
 	cout << " new avg:" << (ttl_new / count_construct) << " append avg:" << (ttl_append / count_append) << endl;
 
-	// priority queue test
-	// position.second.y가 작은 것부터
-	map<int, vector<vector<position>>> permutations; // [size, permutations]
-
-	//TODO
-	// polar_positions 생성할때부터 우선순위 큐 사용하기
-
-	deque<position> example = feature_map["01346"].polar_positions;
-	sort(example.begin(), example.end(), cmp);
-
-	cout << "print example input" << endl;
-	for(auto& pos : example){
-		cout << pos << " ";
-	}
-	cout << endl << endl;
-
-	// perm 생성 시작
-	int len = example.size();
-	for(int i=0; i<len; i++){
-		position front_pos = example[i];
-		cout << "front: " << front_pos << endl;
-		deque<position> remains;
-		for(int j=0; j<len; j++){
-			if(i!=j){
-				remains.push_back(example[j]);
-			}
-		}
-
-		// remain roll
-		int n_remain = remains.size();
-		int cnt_remain = 0;
-		while(cnt_remain < n_remain){
-			deque<position> d_tmp = remains;
-			cout << "perm[" << cnt_remain << "]: ";
-
-			vector<position> perm_tmp;
-			perm_tmp.push_back(front_pos);
-
-			while(!d_tmp.empty()){
-				cout << d_tmp.front() << " ";
-				perm_tmp.push_back(d_tmp.front());
-				d_tmp.pop_front();
-			}
-			cout << endl;
-			permutations[len].push_back(perm_tmp);
-
-			position p = remains.front();
-			remains.pop_front();
-			remains.push_back(p);
-
-			cnt_remain++;
-		}
-		cout << endl;
-	}
-
 	cout << endl << endl << "Print perms" << endl;
+	int cnt = 0;
 	for(auto pair_ : permutations){
 		cout << "[" << pair_.first << "]" << endl;
 		for(auto e : pair_.second){
 			cout << e << endl;
+			cnt++;
 		}
 		cout << endl;
-
 	}
+
+	cout << "ttl cnt:" << cnt << endl;
 }
